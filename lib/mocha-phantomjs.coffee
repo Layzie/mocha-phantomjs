@@ -53,7 +53,8 @@ class Reporter
           failures: 0
           ended: false
           started: false
-          run: ->
+          callback: []
+          run: () ->
             mochaPhantomJS.started = true
             window.callPhantom 'mochaPhantomJS.run': true
       , system.env
@@ -112,11 +113,15 @@ class Reporter
   runner: (reporter) ->
     try
       mocha.setup reporter: reporter
-      mochaPhantomJS.runner = mocha.run()
+
+      mochaPhantomJS.callback.forEach (cb) ->
+        mochaPhantomJS.runner = mocha.run(cb)
+
       if mochaPhantomJS.runner
         cleanup = ->
           mochaPhantomJS.failures = mochaPhantomJS.runner.failures
           mochaPhantomJS.ended = true
+          mochaPhantomJS.callback = []
         if mochaPhantomJS.runner?.stats?.end
           cleanup()
         else
