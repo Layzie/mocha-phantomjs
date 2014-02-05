@@ -1,5 +1,6 @@
 system  = require 'system'
 webpage = require 'webpage'
+fs = require 'fs'
 
 USAGE = """
         Usage: phantomjs mocha-phantomjs.coffee URL REPORTER [CONFIG]
@@ -10,9 +11,9 @@ class Reporter
   constructor: (@reporter, @config) ->
     @url = system.args[1]
     @columns = parseInt(system.env.COLUMNS or 75) * .75 | 0
-    @mochaStarted = false
     @mochaStartWait = @config.timeout || 6000
     @startTime = Date.now()
+    @output = if @config.file then fs.open(@config.file, 'w') else system.stdout
     @fail(USAGE) unless @url
 
   run: ->
@@ -28,10 +29,12 @@ class Reporter
   # Private
 
   fail: (msg, errno) ->
+    @output.close() if @output and @config.file
     console.log msg if msg
     phantom.exit errno || 1
 
   finish: ->
+    @output.close() if @config.file
     phantom.exit @page.evaluate -> mochaPhantomJS.failures
 
   initPage: ->
@@ -41,6 +44,8 @@ class Reporter
     @page.addCookie(cookie) for cookie in @config.cookies or []
     @page.viewportSize = @config.viewportSize if @config.viewportSize
     @page.onConsoleMessage = (msg) -> system.stdout.writeLine(msg)
+    @page.onResourceError = (resErr) ->
+      system.stdout.writeLine "Error loading resource #{resErr.url} (#{resErr.errorCode}). Details: #{resErr.errorString}"
     @page.onError = (msg, traces) =>
       return if @page.evaluate -> window.onerror?
       for {line, file}, index in traces
@@ -57,6 +62,7 @@ class Reporter
           run: () ->
             mochaPhantomJS.started = true
             window.callPhantom 'mochaPhantomJS.run': true
+            mochaPhantomJS.runner
       , system.env
 
   loadPage: ->
@@ -67,7 +73,7 @@ class Reporter
       @waitForInitMocha()
     @page.onCallback = (data) =>
       if data.hasOwnProperty 'Mocha.process.stdout.write'
-        system.stdout.write data['Mocha.process.stdout.write']
+        @output.write data['Mocha.process.stdout.write']
       else if data.hasOwnProperty 'mochaPhantomJS.run'
         @waitForRunMocha() if @injectJS()
       true
@@ -86,9 +92,31 @@ class Reporter
 
   runMocha: ->
     if @config.useColors is false then @page.evaluate -> Mocha.reporters.Base.useColors = false
-    @page.evaluate @runner, @reporter
-    @mochaStarted = @page.evaluate -> mochaPhantomJS.runner or false
-    if @mochaStarted
+    @config.hooks.beforeStart?(this)
+
+    unless @page.evaluate(@setupReporter, @reporter) is true
+      customReporter = fs.read(@reporter)
+      wrapper = ->
+        require = (what) ->
+          what = what.replace /[^a-zA-Z0-9]/g, ''
+          for r of Mocha.reporters
+            return Mocha.reporters[r] if r.toLowerCase() is what
+          throw new Error "Your custom reporter tried to require '#{what}', but Mocha is not running in Node.js in mocha-phantomjs, so Node modules cannot be required - only other reporters"
+
+        module = {}
+        exports = undefined
+        process = Mocha.process
+
+        'customreporter'
+        Mocha.reporters.Custom = exports or module.exports
+
+      wrappedReporter = wrapper.toString().replace "'customreporter'", "(function() {#{customReporter.toString()}})()"
+      @page.evaluate wrappedReporter
+
+      if @page.evaluate(-> !Mocha.reporters.Custom) or @page.evaluate(@setupReporter) isnt true
+        @fail "Failed to use load and use the custom reporter #{@reporter}"
+
+    if @page.evaluate @runner
       @mochaRunAt = new Date().getTime()
       @waitForMocha()
     else
@@ -96,7 +124,11 @@ class Reporter
 
   waitForMocha: =>
     ended = @page.evaluate -> mochaPhantomJS.ended
-    if ended then @finish() else setTimeout @waitForMocha, 100
+    if ended
+      @config.hooks.afterEnd?(this)
+      @finish()
+    else
+      setTimeout @waitForMocha, 100
 
   waitForInitMocha: =>
     setTimeout @waitForInitMocha, 100 unless @checkStarted()
@@ -110,13 +142,17 @@ class Reporter
       @fail "Failed to start mocha: Init timeout", 255
     started
 
-  runner: (reporter) ->
+  setupReporter: (reporter) ->
+    try 
+      mocha.setup
+        reporter: reporter or Mocha.reporters.Custom
+      true
+    catch error
+      error
+
+  runner: ->
     try
-      mocha.setup reporter: reporter
-
-      mochaPhantomJS.callback.forEach (cb) ->
-        mochaPhantomJS.runner = mocha.run(cb)
-
+      mochaPhantomJS.runner = mocha.run()
       if mochaPhantomJS.runner
         cleanup = ->
           mochaPhantomJS.failures = mochaPhantomJS.runner.failures
@@ -126,14 +162,22 @@ class Reporter
           cleanup()
         else
           mochaPhantomJS.runner.on 'end', cleanup
+      !!mochaPhantomJS.runner
     catch error
       false
 
-
+if phantom.version.major isnt 1 or phantom.version.minor < 9
+  console.log 'mocha-phantomjs requires PhantomJS > 1.9.1'
+  phantom.exit -1
 
 reporter = system.args[2] || 'spec'
+
 config   = JSON.parse system.args[3] || '{}'
+
+if config.hooks
+  config.hooks = require(config.hooks)
+else
+  config.hooks = {}
 
 mocha = new Reporter reporter, config
 mocha.run()
-

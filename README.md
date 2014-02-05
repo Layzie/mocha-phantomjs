@@ -54,14 +54,17 @@ Usage: mocha-phantomjs [options] page
    -h, --help                   output usage information
    -V, --version                output the version number
    -R, --reporter <name>        specify the reporter to use
+   -f, --file <filename>        specify the file to dump reporter output
    -t, --timeout <timeout>      specify the test startup timeout to use
    -A, --agent <userAgent>      specify the user agent to use
    -c, --cookies <Object>       phantomjs cookie object http://git.io/RmPxgA
    -h, --header <name>=<value>  specify custom header
-   -s, --setting <key>=<value>  specify phantomjs WebPage settings
-   -v, --view <width>x<height>  specify phantomjs viewport size
+   -k, --hooks <path>           path to hooks module
+   -s, --setting <key>=<value>  specify specific phantom settings
+   -v, --view <width>x<height>  specify phantom viewport size
    -C, --no-color               disable color escape codes
    -p, --path <path>            path to PhantomJS binary
+
 
  Examples:
 
@@ -108,7 +111,7 @@ Mocha-phantomjs does not scrap the web page under test! No other PhantomJS drive
   <img src="https://raw.github.com/metaskills/mocha-phantomjs/master/public/images/slow.gif" alt="Slow Tests Example">
 </div>
 
-The following is a list of tested reporters. Since moving PhantomJS 1.9.1, most core Mocha reporters should "just work" since we now support stdout properly. If you have an issue with a reporter, [open a github issue](https://github.com/metaskills/mocha-phantomjs/issues) and let me know.
+The following is a list of tested reporters. Since moving PhantomJS 1.9.1, most core Mocha reporters should "just work" since we now support stdout properly. Reporters with node dependencies will not work, like `html-cov`. If you have an issue with a reporter, [open a github issue](https://github.com/metaskills/mocha-phantomjs/issues) and let me know.
 
 ### Spec Reporter (default)
 
@@ -132,126 +135,39 @@ The PhantomJS process has no way of knowing anything about your console window's
 env COLUMNS=$COLUMNS phantomjs mocha-phantomjs.coffee URL dot
 ```
 
-### TAP Reporter
+[Bundled](http://visionmedia.github.io/mocha/#reporters) and tested reporters include:
 
-Use `tap` for the reporter argument.
+````
+tap
+min
+list
+doc
+teamcity
+json
+json-cov
+xunit
+progress
+landing
+markdown
+````
 
-<div style="text-align:center;">
-  <img src="https://raw.github.com/metaskills/mocha-phantomjs/master/public/images/reporter_tap.gif" alt="TAP Reporter" width="616">
-</div>
+### Third Party Reporters
 
-### Min Reporter
+Mocha has support for custom [3rd party reporters](https://github.com/visionmedia/mocha/wiki/Third-party-reporters), and mocha-phantomjs does support 3rd party reporters, but keep in mind - *the reporter does not run in Node.js, but in the browser, and node modules can't be required.* You need to only use basic, vanilla JavaScript when using third party reporters. However, some things are available:
 
-Use `min` for the reporter argument.
+- `require`: You can only require other reporters, like `require('./base')` to build off of the BaseReporter
+- `exports`, `module`: Export your reporter class as normal
+- `process`: use `process.stdout.write` preferrably to support the `--file` option over `console.log` (see #114)
 
-<div style="text-align:center;">
-  <img src="https://raw.github.com/metaskills/mocha-phantomjs/master/public/images/reporter_min.gif" alt="Min Reporter" width="616">
-</div>
-
-### List Reporter
-
-Use `list` for the reporter argument.
-
-<div style="text-align:center;">
-  <img src="https://raw.github.com/metaskills/mocha-phantomjs/master/public/images/reporter_list.gif" alt="List Reporter" width="616">
-</div>
-
-### Doc Reporter
-
-Use `doc` for the reporter argument.
-
-<div style="text-align:center;">
-  <img src="https://raw.github.com/metaskills/mocha-phantomjs/master/public/images/reporter_doc.gif" alt="Doc Reporter" width="616">
-</div>
-
-### TeamCity Reporter
-
-Use `teamcity` for the reporter argument.
-
-```
-$ mocha-phantomjs -R teamcity test/passing.html
-##teamcity[testSuiteStarted name='mocha.suite']
-##teamcity[testStarted name='Tests Passing passes 1']
-##teamcity[testFinished name='Tests Passing passes 1' duration='0']
-##teamcity[testStarted name='Tests Passing passes 2']
-##teamcity[testFinished name='Tests Passing passes 2' duration='0']
-##teamcity[testStarted name='Tests Passing passes 3']
-##teamcity[testFinished name='Tests Passing passes 3' duration='0']
-##teamcity[testIgnored name='Tests Passing skips 1' message='pending']
-##teamcity[testFinished name='Tests Passing skips 1' duration='undefined']
-##teamcity[testIgnored name='Tests Passing skips 2' message='pending']
-##teamcity[testFinished name='Tests Passing skips 2' duration='undefined']
-##teamcity[testIgnored name='Tests Passing skips 3' message='pending']
-##teamcity[testFinished name='Tests Passing skips 3' duration='undefined']
-##teamcity[testSuiteFinished name='mocha.suite' duration='133']
-```
-
-### JSON Reporter
-
-Use `json` for the reporter argument.
-
-```
-$ mocha-phantomjs -R json test/passing.html
-{
-  "stats": {
-    "suites": 1,
-    "tests": 6,
-    "passes": 3,
-    "pending": 3,
-    "failures": 0,
-  ...
-```
-
-### JSONCov Reporter
-
-Use `json-cov` for the reporter argument. I have not tested these as they require the [node-jscoverage](https://github.com/visionmedia/node-jscoverage) tool to be used.
-
-```
-$ mocha-phantomjs -r json-cov test/passing.html
-{
-  "instrumentation": "node-jscoverage",
-  "sloc": 0,
-  "hits": 0,
-  "misses": 0,
-  "coverage": 0,
-  "files": [],
-  "stats": {
-    "suites": 1,
-    "tests": 6,
-    "passes": 3,
-    "pending": 3,
-    ...
-```
-
-### HTMLCov Reporter
-
-Use `html-cov` for the reporter argument. I have not tested these as they require the [node-jscoverage](https://github.com/visionmedia/node-jscoverage) tool to be used.
-
-### XUnit Reporter
-
-Use `xunit` for the reporter argument.
-
-```
-<testsuite name="Mocha Tests" tests="18" failures="6" errors="6" skip="6" timestamp="Sun, 21 Oct 2012 17:29:59 GMT" time="0.36">
-<testcase classname="Tests Mixed" name="passes 1" time="0"/>
-<testcase classname="Tests Mixed" name="passes 2" time="0.001"/>
-<testcase classname="Tests Mixed" name="passes 3" time="0"/>
-...
-```
-
+Also, no compilers are supported currently, so please provide JavaScript only for your reporters.
 
 # Testing
 
-Simple! Just clone the repo, then run `npm install` and the various node development dependencies will install to the `node_modules` directory of the project. If you have not done so, it is typically a good idea to add `/node_modules/.bin` to your `$PATH` so these modules bins are used. Now run `cake test` to start off the test suite.
+Simple! Just clone the repo, then run `npm install` and the various node development dependencies will install to the `node_modules` directory of the project. If you have not done so, it is typically a good idea to add `/node_modules/.bin` to your `$PATH` so these modules bins are used. Now run `npm test` to start off the test suite.
 
 We also use Travis CI to run our tests too. The current build status:
 
 [![Build Status](https://secure.travis-ci.org/metaskills/mocha-phantomjs.png)](http://travis-ci.org/metaskills/mocha-phantomjs)
-
-
-# TODO
-
-* Create a `mocha-phantomjs` bin file for use in Node.js and publish a NPM.
 
 
 # Alternatives

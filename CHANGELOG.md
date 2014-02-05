@@ -1,3 +1,23 @@
+3.3.1 / 2014-01-02
+
+  * Send phantomjs stderr to stderr not stdout. Fixes #116
+
+3.3.0 / 2013-12-13
+
+  * Third party reporters are now supported via -R or --reporter
+
+3.2.0 / 2013-12-09
+
+  * --file option for piping reporter output to a file.
+  * --hooks option for providing a module of event handlers of mocha-phantomjs events. Two events are currently supported: `beforeStart` and `afterEnd`
+
+3.1.7 / 2013-11-28
+
+  * Log PhantomJS resource errors. Fixes #109.
+
+3.1.6 / 2013-11-06
+
+  * Ensure PhantomJS version to be >= 1.9 (the latest 1.9.x is recommended.)
 
 3.1.5 / 2013-10-01
 
