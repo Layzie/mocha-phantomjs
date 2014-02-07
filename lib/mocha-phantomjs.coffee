@@ -59,7 +59,7 @@ class Reporter
           ended: false
           started: false
           callback: []
-          run: () ->
+          run: ->
             mochaPhantomJS.started = true
             window.callPhantom 'mochaPhantomJS.run': true
             mochaPhantomJS.runner
